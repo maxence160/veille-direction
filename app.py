@@ -20,37 +20,59 @@ st.set_page_config(
 
 DATE_MIN = datetime(2026, 1, 1, 0, 0, 0)
 
-# Référentiel des personnalités suivies
+# Référentiel strict : Prénom + Nom complet obligatoire pour éviter les confusions
 REFERENTIEL_CANDIDATS = [
-    ("Édouard Philippe", ["edouard philippe", "philippe"], "Horizons"),
-    ("Marine Le Pen", ["marine le pen", "le pen"], "Rassemblement National"),
-    ("Jordan Bardella", ["jordan bardella", "bardella"], "Rassemblement National"),
-    ("Jean-Luc Mélenchon", ["jean-luc melenchon", "jean luc melenchon", "melenchon"], "La France Insoumise"),
-    ("François Ruffin", ["francois ruffin", "ruffin"], "Debout !"),
-    ("Laurent Wauquiez", ["laurent wauquiez", "wauquiez"], "La Droite Républicaine"),
-    ("Gabriel Attal", ["gabriel attal", "attal"], "Renaissance"),
-    ("Gérald Darmanin", ["gerald darmanin", "darmanin"], "Renaissance"),
-    ("Fabien Roussel", ["fabien roussel", "roussel"], "Parti Communiste Français"),
-    ("Bernard Cazeneuve", ["bernard cazeneuve", "cazeneuve"], "La Convention"),
-    ("David Lisnard", ["david lisnard", "lisnard"], "Nouvelle Énergie"),
-    ("Marine Tondelier", ["marine tondelier", "tondelier"], "Les Écologistes"),
+    ("Édouard Philippe", ["edouard philippe"], "Horizons"),
+    ("Marine Le Pen", ["marine le pen"], "Rassemblement National"),
+    ("Jordan Bardella", ["jordan bardella"], "Rassemblement National"),
+    (
+        "Jean-Luc Mélenchon",
+        ["jean-luc melenchon", "jean luc melenchon"],
+        "La France Insoumise",
+    ),
+    ("François Ruffin", ["francois ruffin"], "Debout !"),
+    ("Laurent Wauquiez", ["laurent wauquiez"], "La Droite Républicaine"),
+    ("Gabriel Attal", ["gabriel attal"], "Renaissance"),
+    ("Gérald Darmanin", ["gerald darmanin"], "Renaissance"),
+    ("Fabien Roussel", ["fabien roussel"], "Parti Communiste Français"),
+    ("Bernard Cazeneuve", ["bernard cazeneuve"], "La Convention"),
+    ("David Lisnard", ["david lisnard"], "Nouvelle Énergie"),
+    ("Marine Tondelier", ["marine tondelier"], "Les Écologistes"),
 ]
 
-# Requêtes ciblées : Présidentielle obligatoire + enjeux Coca-Cola post-2026
+# Requêtes ciblées : Présidentielle obligatoire
 QUERIES = [
-    # Fiscalité
-    'présidentielle ("taxe soda" OR "taxe sucre" OR "boissons sucrées" OR fiscalité OR impôt OR TVA) after:2026-01-01',
-    # Environnement
-    'présidentielle (consigne OR "bouteilles plastique" OR réemploi OR emballage OR eau OR "prélèvements d\'eau" OR écologie) after:2026-01-01',
-    # Relations commerciales
-    'présidentielle (EGAlim OR Descrozaille OR "négociations commerciales" OR "grande distribution" OR marges OR "prix planchers") after:2026-01-01',
-    # Health & Nutrition
-    'présidentielle (Nutri-score OR nutrition OR "santé publique" OR sucre OR obésité OR "recettes allégées") after:2026-01-01',
-    # Marketing
-    'présidentielle ("publicité alimentaire" OR "publicité enfants" OR "marketing alimentaire" OR parrainage) after:2026-01-01',
-    # Propositions générales des candidats
-    'présidentielle (programme OR proposition OR annonce OR réforme) agroalimentaire after:2026-01-01',
-    'présidentielle (programme OR proposition OR annonce) (Philippe OR "Le Pen" OR Mélenchon OR Wauquiez OR Attal OR Ruffin) after:2026-01-01',
+    (
+        'présidentielle ("taxe soda" OR "taxe sucre" OR "boissons sucrées" OR'
+        ' fiscalité OR impôt OR TVA) after:2026-01-01'
+    ),
+    (
+        'présidentielle (consigne OR "bouteilles plastique" OR réemploi OR'
+        " emballage OR eau OR \"prélèvements d'eau\" OR écologie)"
+        " after:2026-01-01"
+    ),
+    (
+        'présidentielle (EGAlim OR Descrozaille OR "négociations commerciales"'
+        ' OR "grande distribution" OR marges OR "prix planchers")'
+        " after:2026-01-01"
+    ),
+    (
+        'présidentielle (Nutri-score OR nutrition OR "santé publique" OR sucre'
+        ' OR obésité OR "recettes allégées") after:2026-01-01'
+    ),
+    (
+        'présidentielle ("publicité alimentaire" OR "publicité enfants" OR'
+        ' "marketing alimentaire" OR parrainage) after:2026-01-01'
+    ),
+    (
+        'présidentielle (programme OR proposition OR annonce OR réforme)'
+        " agroalimentaire after:2026-01-01"
+    ),
+    (
+        'présidentielle (programme OR proposition OR annonce) ("Édouard'
+        ' Philippe" OR "Marine Le Pen" OR "Jean-Luc Mélenchon" OR "Laurent'
+        ' Wauquiez" OR "Gabriel Attal" OR "François Ruffin") after:2026-01-01'
+    ),
 ]
 
 st.markdown(
@@ -109,13 +131,14 @@ st.markdown(
         margin-bottom: 24px;
     }
 
+    /* Carte candidat simplifiée sans citations */
     .candidate-card {
         background: rgba(255, 255, 255, 0.65);
         border: 1px solid #D6D3CD;
         border-left: 4px solid #8B261E;
         border-radius: 4px;
-        padding: 16px 20px;
-        margin-bottom: 14px;
+        padding: 14px 18px;
+        margin-bottom: 8px;
     }
     .candidate-name {
         font-family: 'Lora', serif;
@@ -131,15 +154,9 @@ st.markdown(
         font-weight: 600;
         padding: 3px 8px;
         border-radius: 3px;
-        margin: 6px 0;
+        margin-top: 4px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-    }
-    .candidate-quote {
-        font-size: 0.88rem;
-        color: #44403C;
-        margin-top: 4px;
-        line-height: 1.45;
     }
 
     .stTabs [data-baseweb="tab-list"] {
@@ -195,15 +212,61 @@ def identifier_auteur(texte):
 
 def classifier_thematique(texte):
     t = texte.lower()
-    if any(k in t for k in ["plastique", "consigne", "eau", "prélèvement", "emballage", "climat", "écologie", "réemploi"]):
+    if any(
+        k in t
+        for k in [
+            "plastique",
+            "consigne",
+            "eau",
+            "prélèvement",
+            "emballage",
+            "climat",
+            "écologie",
+            "réemploi",
+        ]
+    ):
         return "Environnement"
-    elif any(k in t for k in ["taxe", "impôt", "fiscal", "tva", "redevance", "budget"]):
+    elif any(
+        k in t for k in ["taxe", "impôt", "fiscal", "tva", "redevance", "budget"]
+    ):
         return "Fiscalité"
-    elif any(k in t for k in ["egalim", "descrozaille", "négociation", "distribution", "marge", "prix", "grande distribution"]):
+    elif any(
+        k in t
+        for k in [
+            "egalim",
+            "descrozaille",
+            "négociation",
+            "distribution",
+            "marge",
+            "prix",
+            "grande distribution",
+        ]
+    ):
         return "Relations commerciales"
-    elif any(k in t for k in ["nutri-score", "nutrition", "sucre", "santé", "obésité", "édulcorant", "sel"]):
+    elif any(
+        k in t
+        for k in [
+            "nutri-score",
+            "nutrition",
+            "sucre",
+            "santé",
+            "obésité",
+            "édulcorant",
+            "sel",
+        ]
+    ):
         return "Health & Nutrition"
-    elif any(k in t for k in ["publicité", "marketing", "enfants", "mineurs", "réclame", "communication"]):
+    elif any(
+        k in t
+        for k in [
+            "publicité",
+            "marketing",
+            "enfants",
+            "mineurs",
+            "réclame",
+            "communication",
+        ]
+    ):
         return "Marketing"
     return "Relations commerciales"
 
@@ -231,7 +294,11 @@ def recuperer_propositions():
                     continue
 
                 titres_vus.add(titre_cle)
-                source = entry.source.get("title", "Presse") if hasattr(entry, "source") else "Presse"
+                source = (
+                    entry.source.get("title", "Presse")
+                    if hasattr(entry, "source")
+                    else "Presse"
+                )
 
                 auteur = identifier_auteur(titre)
                 theme = classifier_thematique(titre)
@@ -255,7 +322,6 @@ def recuperer_propositions():
 propositions = recuperer_propositions()
 df_total = pd.DataFrame(propositions) if propositions else pd.DataFrame()
 
-# Gestion de la sélection du candidat en session
 if "filtre_candidat" not in st.session_state:
     st.session_state["filtre_candidat"] = "Tous"
 if "filtre_theme" not in st.session_state:
@@ -268,10 +334,19 @@ def exporter_excel(df_export):
     ws = wb.active
     ws.title = "Propositions Présidentielle"
 
-    headers = ["Date", "Candidat / Porteur", "Thématique", "Média / Source", "Proposition", "Lien"]
+    headers = [
+        "Date",
+        "Candidat / Porteur",
+        "Thématique",
+        "Média / Source",
+        "Proposition",
+        "Lien",
+    ]
     ws.append(headers)
 
-    header_fill = PatternFill(start_color="1C1917", end_color="1C1917", fill_type="solid")
+    header_fill = PatternFill(
+        start_color="1C1917", end_color="1C1917", fill_type="solid"
+    )
     header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
     thin_border = Border(
         left=Side(style="thin", color="D6D3CD"),
@@ -287,7 +362,14 @@ def exporter_excel(df_export):
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = thin_border
 
-    for row in df_export[["Date", "Auteur", "Thématique", "Source", "Proposition", "Lien"]].itertuples(index=False):
+    for row in df_export[[
+        "Date",
+        "Auteur",
+        "Thématique",
+        "Source",
+        "Proposition",
+        "Lien",
+    ]].itertuples(index=False):
         ws.append(list(row))
 
     for r_idx in range(2, len(df_export) + 2):
@@ -321,7 +403,6 @@ st.markdown(
 <div class="milestones">
     <span><strong>1er tour :</strong> 18 avril 2027</span>
     <span><strong>2d tour :</strong> 2 mai 2027</span>
-    <span><strong>Critère :</strong> Dépêches présidentielles post-1er janvier 2026 uniquement</span>
 </div>
 <div class="main-separator"></div>
 """,
@@ -330,22 +411,20 @@ st.markdown(
 
 tab_candidats, tab_propositions = st.tabs(["Candidats", "Propositions"])
 
-# --- Onglet 1 : Candidats ---
+# --- Onglet 1 : Candidats (Épuré sans citations) ---
 with tab_candidats:
-    st.markdown("<h3 style='font-family:Lora,serif; font-size:1.4rem; font-weight:700;'>Candidats déclarés & acteurs clés</h3>", unsafe_allow_html=True)
-    st.caption("Cliquez sur « Voir ses propositions » pour filtrer instantanément toutes ses prises de position dans l'onglet Propositions.")
+    st.markdown(
+        "<h3 style='font-family:Lora,serif; font-size:1.4rem;"
+        " font-weight:700;'>Candidats déclarés & acteurs clés</h3>",
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Cliquez sur un candidat pour filtrer toutes ses propositions dans"
+        " l'onglet dédié."
+    )
 
     c1, c2 = st.columns(2)
     for idx, (nom, _, parti) in enumerate(REFERENTIEL_CANDIDATS):
-        # Récupération de sa dernière proposition enregistrée
-        derniere = "Aucune déclaration spécifique relevée récemment."
-        source_derniere = ""
-        if not df_total.empty:
-            df_c = df_total[df_total["Auteur"] == nom]
-            if not df_c.empty:
-                derniere = df_c.iloc[0]["Proposition"]
-                source_derniere = f"— {df_c.iloc[0]['Source']} ({df_c.iloc[0]['Date']})"
-
         cible = c1 if idx % 2 == 0 else c2
         with cible:
             st.markdown(
@@ -353,20 +432,29 @@ with tab_candidats:
             <div class="candidate-card">
                 <div class="candidate-name">{nom}</div>
                 <span class="candidate-party">{parti}</span>
-                <div class="candidate-quote">« {derniere} » <span style="font-size:0.75rem; color:#8B261E;">{source_derniere}</span></div>
             </div>
             """,
                 unsafe_allow_html=True,
             )
-            if st.button(f"🔍 Voir les propositions de {nom}", key=f"btn_{nom}", use_container_width=True):
+            if st.button(
+                f"🔍 Voir les propositions de {nom}",
+                key=f"btn_{nom}",
+                use_container_width=True,
+            ):
                 st.session_state["filtre_candidat"] = nom
                 st.rerun()
 
 # --- Onglet 2 : Propositions ---
 with tab_propositions:
-    # Boutons-pilules de filtrage par thématique
     st.markdown("**Filtrer par thématique prioritaire :**")
-    themes = ["Tous", "Environnement", "Fiscalité", "Relations commerciales", "Health & Nutrition", "Marketing"]
+    themes = [
+        "Tous",
+        "Environnement",
+        "Fiscalité",
+        "Relations commerciales",
+        "Health & Nutrition",
+        "Marketing",
+    ]
     cols_th = st.columns(len(themes))
 
     for idx, th in enumerate(themes):
@@ -382,32 +470,50 @@ with tab_propositions:
 
     # Application du filtre candidat actif
     if st.session_state["filtre_candidat"] != "Tous":
-        df_filtre = df_filtre[df_filtre["Auteur"] == st.session_state["filtre_candidat"]]
+        df_filtre = df_filtre[
+            df_filtre["Auteur"] == st.session_state["filtre_candidat"]
+        ]
         col_info, col_reset = st.columns([3, 1])
         with col_info:
-            st.info(f"Filtrage actif sur le candidat : **{st.session_state['filtre_candidat']}**")
+            st.info(
+                "Filtrage actif sur le candidat :"
+                f" **{st.session_state['filtre_candidat']}**"
+            )
         with col_reset:
-            if st.button("✖️ Réinitialiser le filtre candidat", use_container_width=True):
+            if st.button(
+                "✖️ Réinitialiser le filtre candidat", use_container_width=True
+            ):
                 st.session_state["filtre_candidat"] = "Tous"
                 st.rerun()
 
     # Application du filtre thématique actif
     if st.session_state["filtre_theme"] != "Tous":
-        df_filtre = df_filtre[df_filtre["Thématique"] == st.session_state["filtre_theme"]]
+        df_filtre = df_filtre[
+            df_filtre["Thématique"] == st.session_state["filtre_theme"]
+        ]
 
-    # Recherche plein texte et téléchargement
+    # Recherche texte et téléchargement
     col_search, col_dl = st.columns([3, 1.2])
     with col_search:
         mot_cle = st.text_input(
             "Recherche plein texte :",
-            placeholder="Rechercher : plastique, soda, eau, distributeurs, taxation...",
+            placeholder=(
+                "Rechercher : plastique, soda, eau, distributeurs,"
+                " taxation..."
+            ),
             label_visibility="collapsed",
         )
         if mot_cle:
             df_filtre = df_filtre[
-                df_filtre["Proposition"].str.contains(mot_cle, case=False, na=False)
-                | df_filtre["Auteur"].str.contains(mot_cle, case=False, na=False)
-                | df_filtre["Source"].str.contains(mot_cle, case=False, na=False)
+                df_filtre["Proposition"].str.contains(
+                    mot_cle, case=False, na=False
+                )
+                | df_filtre["Auteur"].str.contains(
+                    mot_cle, case=False, na=False
+                )
+                | df_filtre["Source"].str.contains(
+                    mot_cle, case=False, na=False
+                )
             ]
 
     with col_dl:
@@ -416,23 +522,44 @@ with tab_propositions:
             st.download_button(
                 label="📥 Télécharger l'Excel",
                 data=fichier_excel,
-                file_name=f"propositions_presidentielle_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                file_name=(
+                    "propositions_presidentielle_"
+                    f"{datetime.now().strftime('%Y%m%d')}.xlsx"
+                ),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
 
-    st.caption(f"{len(df_filtre)} proposition(s) répertoriée(s) — classées de la plus récente à la plus ancienne")
+    st.caption(
+        f"{len(df_filtre)} proposition(s) répertoriée(s) — classées de la plus"
+        " récente à la plus ancienne"
+    )
 
     if not df_filtre.empty:
         st.dataframe(
-            df_filtre[["Date", "Auteur", "Thématique", "Source", "Proposition", "Lien"]],
+            df_filtre[[
+                "Date",
+                "Auteur",
+                "Thématique",
+                "Source",
+                "Proposition",
+                "Lien",
+            ]],
             column_config={
-                "Lien": st.column_config.LinkColumn("Lien presse", display_text="Consulter ↗"),
+                "Lien": st.column_config.LinkColumn(
+                    "Lien presse", display_text="Consulter ↗"
+                ),
                 "Date": st.column_config.TextColumn("Date", width="small"),
-                "Auteur": st.column_config.TextColumn("Qui l'a dit / Porteur", width="medium"),
-                "Thématique": st.column_config.TextColumn("Pôle thématique", width="small"),
+                "Auteur": st.column_config.TextColumn(
+                    "Qui l'a dit / Porteur", width="medium"
+                ),
+                "Thématique": st.column_config.TextColumn(
+                    "Pôle thématique", width="small"
+                ),
                 "Source": st.column_config.TextColumn("Média", width="small"),
-                "Proposition": st.column_config.TextColumn("Détail de la proposition / Annonce", width="large"),
+                "Proposition": st.column_config.TextColumn(
+                    "Détail de la proposition / Annonce", width="large"
+                ),
             },
             hide_index=True,
             use_container_width=True,
