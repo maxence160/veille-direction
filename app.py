@@ -20,53 +20,7 @@ st.set_page_config(
 
 DATE_MIN = datetime(2026, 1, 1, 0, 0, 0)
 
-# Requêtes larges avec opérateur after natif de Google News
-QUERIES_CANDIDATS = [
-    'présidentielle (candidat OR candidature OR "se déclare" OR "déclare sa candidature") after:2026-01-01',
-    'présidentielle (investiture OR investi OR primaire OR "veut être candidat") after:2026-01-01',
-    'présidentielle (Édouard Philippe OR Marine Le Pen OR Mélenchon OR Wauquiez OR Attal OR Ruffin) after:2026-01-01',
-    'présidentielle (Cazeneuve OR Lisnard OR Roussel OR Tondelier OR Bardella OR Darmanin) after:2026-01-01',
-]
-
-QUERIES_LOIS = [
-    # Fiscalité comportementale & Sucres
-    '("taxe soda" OR "taxe sucre" OR "boissons sucrées" OR "édulcorants" OR "taxe nutritionnelle") after:2026-01-01',
-    # Emballages, Plastique & Consigne
-    '(consigne OR "bouteilles plastique" OR "bouteilles en plastique" OR "loi AGEC" OR réemploi OR "emballages plastiques") (loi OR décret OR projet OR proposition) after:2026-01-01',
-    # Négociations commerciales & Prix
-    '(EGAlim OR Descrozaille OR "négociations commerciales" OR "prix planchers" OR "marge distributeurs" OR "grande distribution") (loi OR décret OR proposition) after:2026-01-01',
-    # Eau & Contraintes industrielles
-    '("prélèvements d\'eau" OR "redevance eau" OR "nappes phréatiques" OR embouteillage) (usines OR industrie OR décret OR loi) after:2026-01-01',
-    # Santé publique, Nutri-score & Marketing
-    '(Nutri-score OR "publicité alimentaire" OR "produits ultra-transformés" OR reformulation) (loi OR interdiction OR obligation) after:2026-01-01',
-    # Législation & Programmes agroalimentaires au sens large
-    'agroalimentaire ("proposition de loi" OR "projet de loi" OR "Assemblée nationale" OR "Sénat") after:2026-01-01',
-    'présidentielle ("industrie agroalimentaire" OR alimentation OR agriculture) (programme OR réforme OR fiscalité) after:2026-01-01',
-    'présidentielle ("proposition de loi" OR "projet de loi" OR réforme) after:2026-01-01',
-]
-
-PARTIS_MAPPING = [
-    ("Horizons", "Horizons"),
-    ("Renaissance", "Renaissance"),
-    ("Rassemblement National", "Rassemblement National"),
-    ("RN", "Rassemblement National"),
-    ("La France Insoumise", "La France Insoumise"),
-    ("LFI", "La France Insoumise"),
-    ("Parti Socialiste", "Parti Socialiste"),
-    ("PS", "Parti Socialiste"),
-    ("Les Républicains", "Les Républicains"),
-    ("LR", "Les Républicains"),
-    ("Droite Républicaine", "La Droite Républicaine"),
-    ("Écologistes", "Les Écologistes"),
-    ("EELV", "Les Écologistes"),
-    ("Parti Communiste", "Parti Communiste Français"),
-    ("PCF", "Parti Communiste Français"),
-    ("Reconquête", "Reconquête"),
-    ("Debout", "Debout !"),
-    ("MoDem", "MoDem"),
-    ("UDI", "UDI"),
-]
-
+# Référentiel des personnalités suivies
 REFERENTIEL_CANDIDATS = [
     ("Édouard Philippe", ["edouard philippe", "philippe"], "Horizons"),
     ("Marine Le Pen", ["marine le pen", "le pen"], "Rassemblement National"),
@@ -80,6 +34,23 @@ REFERENTIEL_CANDIDATS = [
     ("Bernard Cazeneuve", ["bernard cazeneuve", "cazeneuve"], "La Convention"),
     ("David Lisnard", ["david lisnard", "lisnard"], "Nouvelle Énergie"),
     ("Marine Tondelier", ["marine tondelier", "tondelier"], "Les Écologistes"),
+]
+
+# Requêtes ciblées : Présidentielle obligatoire + enjeux Coca-Cola post-2026
+QUERIES = [
+    # Fiscalité
+    'présidentielle ("taxe soda" OR "taxe sucre" OR "boissons sucrées" OR fiscalité OR impôt OR TVA) after:2026-01-01',
+    # Environnement
+    'présidentielle (consigne OR "bouteilles plastique" OR réemploi OR emballage OR eau OR "prélèvements d\'eau" OR écologie) after:2026-01-01',
+    # Relations commerciales
+    'présidentielle (EGAlim OR Descrozaille OR "négociations commerciales" OR "grande distribution" OR marges OR "prix planchers") after:2026-01-01',
+    # Health & Nutrition
+    'présidentielle (Nutri-score OR nutrition OR "santé publique" OR sucre OR obésité OR "recettes allégées") after:2026-01-01',
+    # Marketing
+    'présidentielle ("publicité alimentaire" OR "publicité enfants" OR "marketing alimentaire" OR parrainage) after:2026-01-01',
+    # Propositions générales des candidats
+    'présidentielle (programme OR proposition OR annonce OR réforme) agroalimentaire after:2026-01-01',
+    'présidentielle (programme OR proposition OR annonce) (Philippe OR "Le Pen" OR Mélenchon OR Wauquiez OR Attal OR Ruffin) after:2026-01-01',
 ]
 
 st.markdown(
@@ -143,7 +114,7 @@ st.markdown(
         border: 1px solid #D6D3CD;
         border-left: 4px solid #8B261E;
         border-radius: 4px;
-        padding: 18px 20px;
+        padding: 16px 20px;
         margin-bottom: 14px;
     }
     .candidate-name {
@@ -169,14 +140,6 @@ st.markdown(
         color: #44403C;
         margin-top: 4px;
         line-height: 1.45;
-    }
-    .candidate-link {
-        display: inline-block;
-        margin-top: 6px;
-        font-size: 0.8rem;
-        color: #8B261E;
-        text-decoration: none;
-        font-weight: 600;
     }
 
     .stTabs [data-baseweb="tab-list"] {
@@ -221,29 +184,36 @@ def parser_date(date_str):
         return None
 
 
-def detecter_parti(texte):
-    for declinaison, label in PARTIS_MAPPING:
-        if re.search(r"\b" + re.escape(declinaison) + r"\b", texte, re.IGNORECASE):
-            return label
-    return "Mouvement en cours de précision"
-
-
-def identifier_candidat_unique(texte):
+def identifier_auteur(texte):
     texte_norm = normaliser_chaine(texte)
-    for nom_officiel, variantes, parti_defaut in REFERENTIEL_CANDIDATS:
+    for nom_officiel, variantes, _ in REFERENTIEL_CANDIDATS:
         for v in variantes:
             if re.search(r"\b" + re.escape(v) + r"\b", texte_norm):
-                parti = detecter_parti(texte)
-                return nom_officiel, parti if parti != "Mouvement en cours de précision" else parti_defaut
-    return None, None
+                return nom_officiel
+    return "Débat présidentiel / Collectif"
+
+
+def classifier_thematique(texte):
+    t = texte.lower()
+    if any(k in t for k in ["plastique", "consigne", "eau", "prélèvement", "emballage", "climat", "écologie", "réemploi"]):
+        return "Environnement"
+    elif any(k in t for k in ["taxe", "impôt", "fiscal", "tva", "redevance", "budget"]):
+        return "Fiscalité"
+    elif any(k in t for k in ["egalim", "descrozaille", "négociation", "distribution", "marge", "prix", "grande distribution"]):
+        return "Relations commerciales"
+    elif any(k in t for k in ["nutri-score", "nutrition", "sucre", "santé", "obésité", "édulcorant", "sel"]):
+        return "Health & Nutrition"
+    elif any(k in t for k in ["publicité", "marketing", "enfants", "mineurs", "réclame", "communication"]):
+        return "Marketing"
+    return "Relations commerciales"
 
 
 @st.cache_data(ttl=600, show_spinner=False)
-def recuperer_donnees():
-    articles_lois = []
+def recuperer_propositions():
+    articles = []
     titres_vus = set()
 
-    for q in QUERIES_LOIS:
+    for q in QUERIES:
         url = f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl=fr&gl=FR&ceid=FR:fr"
         try:
             flux = feedparser.parse(url)
@@ -257,72 +227,48 @@ def recuperer_donnees():
                     continue
 
                 dt = parser_date(entry.get("published", ""))
-                # On garde si la date est inconnue ou postérieure au 01/01/2026
                 if dt and dt < DATE_MIN:
                     continue
 
                 titres_vus.add(titre_cle)
                 source = entry.source.get("title", "Presse") if hasattr(entry, "source") else "Presse"
 
-                articles_lois.append({
+                auteur = identifier_auteur(titre)
+                theme = classifier_thematique(titre)
+
+                articles.append({
                     "Date": dt.strftime("%d %b %Y %H:%M") if dt else "Récemment",
+                    "Auteur": auteur,
+                    "Thématique": theme,
+                    "Proposition": titre,
                     "Source": source,
-                    "Titre": titre,
                     "Lien": entry.link,
                     "_dt": dt.isoformat() if dt else "2026-01-01T00:00:00",
                 })
         except Exception:
             continue
 
-    articles_lois.sort(key=lambda x: x.get("_dt", ""), reverse=True)
-
-    candidats_uniques = {}
-    for q in QUERIES_CANDIDATS:
-        url = f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl=fr&gl=FR&ceid=FR:fr"
-        try:
-            flux = feedparser.parse(url)
-            for entry in flux.entries:
-                dt = parser_date(entry.get("published", ""))
-                if dt and dt < DATE_MIN:
-                    continue
-
-                titre = html.unescape(entry.title)
-                source = entry.source.get("title", "Presse") if hasattr(entry, "source") else "Presse"
-                if " - " in titre:
-                    titre = titre.rsplit(" - ", 1)[0]
-
-                nom_officiel, parti = identifier_candidat_unique(titre)
-                if nom_officiel:
-                    dt_iso = dt.isoformat() if dt else "2026-01-01T00:00:00"
-                    if (nom_officiel not in candidats_uniques) or (dt_iso > candidats_uniques[nom_officiel].get("_dt", "")):
-                        candidats_uniques[nom_officiel] = {
-                            "Nom": nom_officiel,
-                            "Parti": parti,
-                            "DerniereAnnonce": titre,
-                            "Source": source,
-                            "Date": dt.strftime("%d %b %Y") if dt else "2026",
-                            "Lien": entry.link,
-                            "_dt": dt_iso,
-                        }
-        except Exception:
-            continue
-
-    liste_candidats = list(candidats_uniques.values())
-    liste_candidats.sort(key=lambda x: x.get("_dt", ""), reverse=True)
-
-    return articles_lois, liste_candidats
+    articles.sort(key=lambda x: x.get("_dt", ""), reverse=True)
+    return articles
 
 
-data_lois, data_cand = recuperer_donnees()
+propositions = recuperer_propositions()
+df_total = pd.DataFrame(propositions) if propositions else pd.DataFrame()
+
+# Gestion de la sélection du candidat en session
+if "filtre_candidat" not in st.session_state:
+    st.session_state["filtre_candidat"] = "Tous"
+if "filtre_theme" not in st.session_state:
+    st.session_state["filtre_theme"] = "Tous"
 
 
 def exporter_excel(df_export):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Veille Législative France"
+    ws.title = "Propositions Présidentielle"
 
-    headers = ["Date", "Média / Source", "Proposition de loi / Régulation", "Lien source"]
+    headers = ["Date", "Candidat / Porteur", "Thématique", "Média / Source", "Proposition", "Lien"]
     ws.append(headers)
 
     header_fill = PatternFill(start_color="1C1917", end_color="1C1917", fill_type="solid")
@@ -341,7 +287,7 @@ def exporter_excel(df_export):
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = thin_border
 
-    for row in df_export[["Date", "Source", "Titre", "Lien"]].itertuples(index=False):
+    for row in df_export[["Date", "Auteur", "Thématique", "Source", "Proposition", "Lien"]].itertuples(index=False):
         ws.append(list(row))
 
     for r_idx in range(2, len(df_export) + 2):
@@ -349,7 +295,7 @@ def exporter_excel(df_export):
             cell = ws.cell(row=r_idx, column=c_idx)
             cell.border = thin_border
             cell.alignment = Alignment(vertical="center")
-            if c_idx == 4:
+            if c_idx == 6:
                 cell.font = Font(color="8B261E", underline="single")
                 cell.hyperlink = cell.value
 
@@ -363,6 +309,7 @@ def exporter_excel(df_export):
     return output.getvalue()
 
 
+# En-tête éditorial
 st.markdown(
     f"""
 <div class="top-meta">
@@ -370,82 +317,125 @@ st.markdown(
     <span>{datetime.now().strftime('%d %B %Y')} — Synchronisation continue</span>
 </div>
 <h1 class="header-title">Présidentielle 2027<br>— <em>la course, en un coup d'œil</em></h1>
-<p class="header-lead">Veille stratégique ciblée sur les déclarations électorales, réformes fiscales, emballages, gestion de l'eau et régulations du secteur agroalimentaire.</p>
+<p class="header-lead">Observatoire systématique des propositions de campagne et prises de position présidentielles impactant le secteur agroalimentaire.</p>
 <div class="milestones">
     <span><strong>1er tour :</strong> 18 avril 2027</span>
     <span><strong>2d tour :</strong> 2 mai 2027</span>
-    <span><strong>Périmètre :</strong> Presse nationale et dépêches post-1er janvier 2026</span>
+    <span><strong>Critère :</strong> Dépêches présidentielles post-1er janvier 2026 uniquement</span>
 </div>
 <div class="main-separator"></div>
 """,
     unsafe_allow_html=True,
 )
 
-tab_candidats, tab_lois = st.tabs(["Candidats déclarés", "Propositions de loi & Régulations"])
+tab_candidats, tab_propositions = st.tabs(["Candidats", "Propositions"])
 
+# --- Onglet 1 : Candidats ---
 with tab_candidats:
-    st.markdown("<h3 style='font-family:Lora,serif; font-size:1.4rem; font-weight:700;'>Candidats déclarés recensés dans la presse</h3>", unsafe_allow_html=True)
-    st.caption("Fiche unique dédoublonnée par candidat, présentant sa déclaration la plus récente relevée dans les médias nationaux.")
+    st.markdown("<h3 style='font-family:Lora,serif; font-size:1.4rem; font-weight:700;'>Candidats déclarés & acteurs clés</h3>", unsafe_allow_html=True)
+    st.caption("Cliquez sur « Voir ses propositions » pour filtrer instantanément toutes ses prises de position dans l'onglet Propositions.")
 
-    if data_cand:
-        c1, c2 = st.columns(2)
-        for idx, c in enumerate(data_cand):
-            col_dest = c1 if idx % 2 == 0 else c2
-            with col_dest:
-                st.markdown(
-                    f"""
-                <div class="candidate-card">
-                    <div class="candidate-name">{c['Nom']}</div>
-                    <span class="candidate-party">{c['Parti']}</span>
-                    <div class="candidate-quote">« {c['DerniereAnnonce']} »</div>
-                    <a class="candidate-link" href="{c['Lien']}" target="_blank">Consulter la source ({c['Source']} - {c['Date']}) ↗</a>
-                </div>
-                """,
-                    unsafe_allow_html=True,
-                )
-    else:
-        st.info("Aucune déclaration formelle recensée dans les médias récents.")
+    c1, c2 = st.columns(2)
+    for idx, (nom, _, parti) in enumerate(REFERENTIEL_CANDIDATS):
+        # Récupération de sa dernière proposition enregistrée
+        derniere = "Aucune déclaration spécifique relevée récemment."
+        source_derniere = ""
+        if not df_total.empty:
+            df_c = df_total[df_total["Auteur"] == nom]
+            if not df_c.empty:
+                derniere = df_c.iloc[0]["Proposition"]
+                source_derniere = f"— {df_c.iloc[0]['Source']} ({df_c.iloc[0]['Date']})"
 
-with tab_lois:
-    df_lois = pd.DataFrame(data_lois) if data_lois else pd.DataFrame()
+        cible = c1 if idx % 2 == 0 else c2
+        with cible:
+            st.markdown(
+                f"""
+            <div class="candidate-card">
+                <div class="candidate-name">{nom}</div>
+                <span class="candidate-party">{parti}</span>
+                <div class="candidate-quote">« {derniere} » <span style="font-size:0.75rem; color:#8B261E;">{source_derniere}</span></div>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
+            if st.button(f"🔍 Voir les propositions de {nom}", key=f"btn_{nom}", use_container_width=True):
+                st.session_state["filtre_candidat"] = nom
+                st.rerun()
 
+# --- Onglet 2 : Propositions ---
+with tab_propositions:
+    # Boutons-pilules de filtrage par thématique
+    st.markdown("**Filtrer par thématique prioritaire :**")
+    themes = ["Tous", "Environnement", "Fiscalité", "Relations commerciales", "Health & Nutrition", "Marketing"]
+    cols_th = st.columns(len(themes))
+
+    for idx, th in enumerate(themes):
+        with cols_th[idx]:
+            label = f"🔴 {th}" if st.session_state["filtre_theme"] == th else th
+            if st.button(label, key=f"theme_{th}", use_container_width=True):
+                st.session_state["filtre_theme"] = th
+                st.rerun()
+
+    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+
+    df_filtre = df_total.copy()
+
+    # Application du filtre candidat actif
+    if st.session_state["filtre_candidat"] != "Tous":
+        df_filtre = df_filtre[df_filtre["Auteur"] == st.session_state["filtre_candidat"]]
+        col_info, col_reset = st.columns([3, 1])
+        with col_info:
+            st.info(f"Filtrage actif sur le candidat : **{st.session_state['filtre_candidat']}**")
+        with col_reset:
+            if st.button("✖️ Réinitialiser le filtre candidat", use_container_width=True):
+                st.session_state["filtre_candidat"] = "Tous"
+                st.rerun()
+
+    # Application du filtre thématique actif
+    if st.session_state["filtre_theme"] != "Tous":
+        df_filtre = df_filtre[df_filtre["Thématique"] == st.session_state["filtre_theme"]]
+
+    # Recherche plein texte et téléchargement
     col_search, col_dl = st.columns([3, 1.2])
     with col_search:
         mot_cle = st.text_input(
-            "Recherche multicritère :",
-            placeholder="Filtrer : taxe, soda, emballage, consigne, eau, marges, Nutri-Score...",
+            "Recherche plein texte :",
+            placeholder="Rechercher : plastique, soda, eau, distributeurs, taxation...",
             label_visibility="collapsed",
         )
-
-    if not df_lois.empty:
         if mot_cle:
-            df_lois = df_lois[
-                df_lois["Titre"].str.contains(mot_cle, case=False, na=False)
-                | df_lois["Source"].str.contains(mot_cle, case=False, na=False)
+            df_filtre = df_filtre[
+                df_filtre["Proposition"].str.contains(mot_cle, case=False, na=False)
+                | df_filtre["Auteur"].str.contains(mot_cle, case=False, na=False)
+                | df_filtre["Source"].str.contains(mot_cle, case=False, na=False)
             ]
 
-        with col_dl:
-            fichier_excel = exporter_excel(df_lois)
+    with col_dl:
+        if not df_filtre.empty:
+            fichier_excel = exporter_excel(df_filtre)
             st.download_button(
-                label="📥 Télécharger l'Excel exécutif",
+                label="📥 Télécharger l'Excel",
                 data=fichier_excel,
-                file_name=f"veille_lois_agro_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                file_name=f"propositions_presidentielle_{datetime.now().strftime('%Y%m%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
 
-        st.caption(f"{len(df_lois)} publication(s) répertoriée(s) — classées de la plus récente à la plus ancienne")
+    st.caption(f"{len(df_filtre)} proposition(s) répertoriée(s) — classées de la plus récente à la plus ancienne")
 
+    if not df_filtre.empty:
         st.dataframe(
-            df_lois[["Date", "Source", "Titre", "Lien"]],
+            df_filtre[["Date", "Auteur", "Thématique", "Source", "Proposition", "Lien"]],
             column_config={
-                "Lien": st.column_config.LinkColumn("Source", display_text="Consulter le texte ↗"),
-                "Date": st.column_config.TextColumn("Date de parution", width="small"),
-                "Source": st.column_config.TextColumn("Média français", width="small"),
-                "Titre": st.column_config.TextColumn("Proposition de loi / Régulation / Mesure", width="large"),
+                "Lien": st.column_config.LinkColumn("Lien presse", display_text="Consulter ↗"),
+                "Date": st.column_config.TextColumn("Date", width="small"),
+                "Auteur": st.column_config.TextColumn("Qui l'a dit / Porteur", width="medium"),
+                "Thématique": st.column_config.TextColumn("Pôle thématique", width="small"),
+                "Source": st.column_config.TextColumn("Média", width="small"),
+                "Proposition": st.column_config.TextColumn("Détail de la proposition / Annonce", width="large"),
             },
             hide_index=True,
             use_container_width=True,
         )
     else:
-        st.info("Recherche des articles en cours...")
+        st.info("Aucune proposition ne correspond à cette combinaison de filtres.")
