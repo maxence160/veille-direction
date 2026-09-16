@@ -1,6 +1,7 @@
 import html
 import io
 import re
+import unicodedata
 import urllib.parse
 from datetime import datetime
 import dateutil.parser
@@ -64,21 +65,20 @@ PARTIS_MAPPING = [
     ("UDI", "UDI"),
 ]
 
-POLITIQUES_CONNUES = [
-    ("Édouard Philippe", "Horizons"),
-    ("Edouard Philippe", "Horizons"),
-    ("Marine Le Pen", "Rassemblement National"),
-    ("Jordan Bardella", "Rassemblement National"),
-    ("Jean-Luc Mélenchon", "La France Insoumise"),
-    ("François Ruffin", "Debout !"),
-    ("Laurent Wauquiez", "La Droite Républicaine"),
-    ("Gabriel Attal", "Renaissance"),
-    ("Gérald Darmanin", "Renaissance"),
-    ("Fabien Roussel", "Parti Communiste Français"),
-    ("Bernard Cazeneuve", "La Convention"),
-    ("David Lisnard", "Nouvelle Énergie"),
-    ("Yannick Jadot", "Les Écologistes"),
-    ("Marine Tondelier", "Les Écologistes"),
+# Répertoire de référence : (Nom officiel affiché, Liste des variantes possibles, Parti par défaut)
+REFERENTIEL_CANDIDATS = [
+    ("Édouard Philippe", ["edouard philippe", "philippe"], "Horizons"),
+    ("Marine Le Pen", ["marine le pen", "le pen"], "Rassemblement National"),
+    ("Jordan Bardella", ["jordan bardella", "bardella"], "Rassemblement National"),
+    ("Jean-Luc Mélenchon", ["jean-luc melenchon", "jean luc melenchon", "melenchon"], "La France Insoumise"),
+    ("François Ruffin", ["francois ruffin", "ruffin"], "Debout !"),
+    ("Laurent Wauquiez", ["laurent wauquiez", "wauquiez"], "La Droite Républicaine"),
+    ("Gabriel Attal", ["gabriel attal", "attal"], "Renaissance"),
+    ("Gérald Darmanin", ["gerald darmanin", "darmanin"], "Renaissance"),
+    ("Fabien Roussel", ["fabien roussel", "roussel"], "Parti Communiste Français"),
+    ("Bernard Cazeneuve", ["bernard cazeneuve", "cazeneuve"], "La Convention"),
+    ("David Lisnard", ["david lisnard", "lisnard"], "Nouvelle Énergie"),
+    ("Marine Tondelier", ["marine tondelier", "tondelier"], "Les Écologistes"),
 ]
 
 st.markdown(
@@ -205,6 +205,12 @@ st.markdown(
 )
 
 
+def normaliser_chaine(texte):
+    """Retire les accents et passe en minuscules pour comparaison stricte."""
+    nfkd = unicodedata.normalize("NFKD", texte)
+    return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower()
+
+
 def parser_date(date_str):
     try:
         dt = dateutil.parser.parse(date_str)
@@ -219,14 +225,16 @@ def detecter_parti(texte):
     for declinaison, label in PARTIS_MAPPING:
         if re.search(r"\b" + re.escape(declinaison) + r"\b", texte, re.IGNORECASE):
             return label
-    return "Mouvement politique en cours de précision"
+    return "Mouvement en cours de précision"
 
 
-def detecter_candidat(texte):
-    for nom, parti_defaut in POLITIQUES_CONNUES:
-        if re.search(r"\b" + re.escape(nom) + r"\b", texte, re.IGNORECASE):
-            parti = detecter_parti(texte)
-            return nom, parti if parti != "Mouvement politique en cours de précision" else parti_defaut
+def identifier_candidat_unique(texte):
+    texte_norm = normaliser_chaine(texte)
+    for nom_officiel, variantes, parti_defaut in REFERENTIEL_CANDIDATS:
+        for v in variantes:
+            if re.search(r"\b" + re.escape(v) + r"\b", texte_norm):
+                parti = detecter_parti(texte)
+                return nom_officiel, parti if parti != "Mouvement en cours de précision" else parti_defaut
     return None, None
 
 
@@ -249,7 +257,7 @@ def recuperer_donnees():
                     continue
 
                 liens_vus.add(lien)
-                source = entry.source.get("title", "Presse") if hasattr(entry, "source") else "Presse"
+                source = entry.source.get("title", "Presse française") if hasattr(entry, "source") else "Presse"
                 titre = html.unescape(entry.title)
                 if " - " in titre:
                     titre = titre.rsplit(" - ", 1)[0]
@@ -264,9 +272,12 @@ def recuperer_donnees():
         except Exception:
             continue
 
+    # Tri antichronologique strict pour les lois
     articles_lois.sort(key=lambda x: x.get("_dt", ""), reverse=True)
 
-    candidats_map = {}
+    # Dictionnaire utilisant le Nom Officiel Unique comme clé pour bannir tout doublon
+    candidats_uniques = {}
+
     for q in QUERIES_CANDIDATS:
         url = f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl=fr&gl=FR&ceid=FR:fr"
         try:
@@ -281,12 +292,14 @@ def recuperer_donnees():
                 if " - " in titre:
                     titre = titre.rsplit(" - ", 1)[0]
 
-                nom, parti = detecter_candidat(titre)
-                if nom:
+                nom_officiel, parti = identifier_candidat_unique(titre)
+                if nom_officiel:
                     dt_iso = dt.isoformat() if dt else "2026-01-01T00:00:00"
-                    if nom not in candidats_map or dt_iso > candidats_map[nom].get("_dt", ""):
-                        candidats_map[nom] = {
-                            "Nom": nom,
+
+                    # Si le candidat existe déjà, on ne remplace que si la dépêche est plus récente
+                    if (nom_officiel not in candidats_uniques) or (dt_iso > candidats_uniques[nom_officiel].get("_dt", "")):
+                        candidats_uniques[nom_officiel] = {
+                            "Nom": nom_officiel,
                             "Parti": parti,
                             "DerniereAnnonce": titre,
                             "Source": source,
@@ -297,7 +310,7 @@ def recuperer_donnees():
         except Exception:
             continue
 
-    liste_candidats = list(candidats_map.values())
+    liste_candidats = list(candidats_uniques.values())
     liste_candidats.sort(key=lambda x: x.get("_dt", ""), reverse=True)
 
     return articles_lois, liste_candidats
@@ -360,11 +373,11 @@ st.markdown(
     <span>{datetime.now().strftime('%d %B %Y')} — Synchronisation automatique</span>
 </div>
 <h1 class="header-title">Présidentielle 2027<br>— <em>la course, en un coup d'œil</em></h1>
-<p class="header-lead">Suivi des déclarations de candidatures dans les médias et des propositions de loi françaises (focus régulation et secteur agroalimentaire).</p>
+<p class="header-lead">Suivi des candidatures dans les médias et des propositions de loi françaises (focus régulation et secteur agroalimentaire).</p>
 <div class="milestones">
     <span><strong>1er tour :</strong> 18 avril 2027</span>
     <span><strong>2d tour :</strong> 2 mai 2027</span>
-    <span><strong>Filtre temporel :</strong> Textes et déclarations post-1er janvier 2026</span>
+    <span><strong>Filtre temporel :</strong> Dépêches post-1er janvier 2026 uniquement</span>
 </div>
 <div class="main-separator"></div>
 """,
@@ -374,8 +387,8 @@ st.markdown(
 tab_candidats, tab_lois = st.tabs(["Candidats déclarés", "Propositions de loi"])
 
 with tab_candidats:
-    st.markdown("<h3 style='font-family:Lora,serif; font-size:1.4rem; font-weight:700;'>Personnalités déclarées candidates dans la presse</h3>", unsafe_allow_html=True)
-    st.caption("Liste actualisée automatiquement d'après les dernières dépêches et déclarations publiques relevées dans les médias nationaux.")
+    st.markdown("<h3 style='font-family:Lora,serif; font-size:1.4rem; font-weight:700;'>Candidats déclarés recensés dans la presse</h3>", unsafe_allow_html=True)
+    st.caption("Fiche unique par personnalité, actualisée avec sa plus récente prise de parole relevée dans les médias français.")
 
     if data_cand:
         c1, c2 = st.columns(2)
@@ -394,7 +407,7 @@ with tab_candidats:
                     unsafe_allow_html=True,
                 )
     else:
-        st.info("Recherche et analyse des déclarations en cours...")
+        st.info("Aucune déclaration formelle recensée dans les médias récents.")
 
 with tab_lois:
     df_lois = pd.DataFrame(data_lois) if data_lois else pd.DataFrame()
@@ -424,7 +437,7 @@ with tab_lois:
                 use_container_width=True,
             )
 
-        st.caption(f"{len(df_lois)} proposition(s) de loi et mesure(s) répertoriée(s) — de la plus récente à la plus ancienne")
+        st.caption(f"{len(df_lois)} proposition(s) de loi et mesure(s) répertoriée(s) — classées de la plus récente à la plus ancienne")
 
         st.dataframe(
             df_lois[["Date", "Source", "Titre", "Lien"]],
