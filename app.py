@@ -1,7 +1,5 @@
 import html
 import io
-import json
-import os
 import re
 import urllib.parse
 from datetime import datetime
@@ -20,8 +18,6 @@ st.set_page_config(
 )
 
 DATE_MIN = datetime(2026, 1, 1, 0, 0, 0)
-DB_LOIS = "veille_data.json"
-DB_CANDIDATS = "candidats_presse.json"
 
 QUERIES_CANDIDATS = [
     'présidentielle "se déclare candidat"',
@@ -29,25 +25,24 @@ QUERIES_CANDIDATS = [
     'présidentielle "candidat officiel"',
     'présidentielle "candidature déclarée"',
     'présidentielle "investi par"',
-    'présidentielle primaire parti',
+    'présidentielle "sera candidat"',
 ]
 
 QUERIES_LOIS = [
-    'présidentielle "proposition de loi"',
-    'présidentielle "projet de loi"',
-    'présidentielle "mesure de campagne"',
-    'présidentielle "programme économique"',
-    'présidentielle fiscalité entreprises',
-    'présidentielle "agroalimentaire"',
-    'présidentielle "taxe soda" OR "taxe sucre"',
-    'présidentielle agriculture alimentation',
-    'présidentielle "industrie agroalimentaire"',
-    'présidentielle emballage plastique consigne',
-    'présidentielle régulation distribution marges',
+    'France "proposition de loi" présidentielle',
+    '"proposition de loi" Assemblée nationale présidentielle',
+    '"proposition de loi" Sénat présidentielle',
+    'France "projet de loi" présidentielle',
+    '"proposition de loi" agroalimentaire',
+    '"proposition de loi" "taxe soda" OR "taxe sucre"',
+    '"proposition de loi" agriculture alimentation',
     'présidentielle EGAlim négociations commerciales',
+    '"proposition de loi" emballage plastique consigne',
+    '"proposition de loi" grande distribution marges',
+    'France "mesure fiscale" industrie agroalimentaire',
 ]
 
-PARTIS_CONNUS = [
+PARTIS_MAPPING = [
     ("Horizons", "Horizons"),
     ("Renaissance", "Renaissance"),
     ("Rassemblement National", "Rassemblement National"),
@@ -59,14 +54,31 @@ PARTIS_CONNUS = [
     ("Les Républicains", "Les Républicains"),
     ("LR", "Les Républicains"),
     ("Droite Républicaine", "La Droite Républicaine"),
-    ("Écologistes", "Les Écologistes (EELV)"),
-    ("EELV", "Les Écologistes (EELV)"),
-    ("Parti Communiste", "PCF"),
-    ("PCF", "PCF"),
+    ("Écologistes", "Les Écologistes"),
+    ("EELV", "Les Écologistes"),
+    ("Parti Communiste", "Parti Communiste Français"),
+    ("PCF", "Parti Communiste Français"),
     ("Reconquête", "Reconquête"),
     ("Debout", "Debout !"),
     ("MoDem", "MoDem"),
     ("UDI", "UDI"),
+]
+
+POLITIQUES_CONNUES = [
+    ("Édouard Philippe", "Horizons"),
+    ("Edouard Philippe", "Horizons"),
+    ("Marine Le Pen", "Rassemblement National"),
+    ("Jordan Bardella", "Rassemblement National"),
+    ("Jean-Luc Mélenchon", "La France Insoumise"),
+    ("François Ruffin", "Debout !"),
+    ("Laurent Wauquiez", "La Droite Républicaine"),
+    ("Gabriel Attal", "Renaissance"),
+    ("Gérald Darmanin", "Renaissance"),
+    ("Fabien Roussel", "Parti Communiste Français"),
+    ("Bernard Cazeneuve", "La Convention"),
+    ("David Lisnard", "Nouvelle Énergie"),
+    ("Yannick Jadot", "Les Écologistes"),
+    ("Marine Tondelier", "Les Écologistes"),
 ]
 
 st.markdown(
@@ -125,37 +137,39 @@ st.markdown(
         margin-bottom: 24px;
     }
 
-    .callout {
-        background-color: rgba(255, 255, 255, 0.55);
+    .candidate-card {
+        background: rgba(255, 255, 255, 0.65);
         border: 1px solid #D6D3CD;
-        border-left: 4px solid #9A7B56;
+        border-left: 4px solid #8B261E;
         border-radius: 4px;
-        padding: 16px 20px;
-        font-size: 0.88rem;
-        color: #1C1917;
-        line-height: 1.6;
-        margin-bottom: 28px;
-    }
-
-    .candidate-box {
-        background: rgba(255, 255, 255, 0.6);
-        border: 1px solid #D6D3CD;
-        border-radius: 4px;
-        padding: 16px 18px;
-        margin-bottom: 12px;
+        padding: 18px 20px;
+        margin-bottom: 14px;
     }
     .candidate-name {
         font-family: 'Lora', serif;
         font-weight: 700;
-        font-size: 1.1rem;
+        font-size: 1.2rem;
         color: #1C1917;
-        margin-bottom: 4px;
     }
-    .candidate-role {
-        font-size: 0.85rem;
-        color: #57534E;
+    .candidate-party {
+        display: inline-block;
+        background-color: #1C1917;
+        color: #F4F1EA;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 3px;
+        margin: 6px 0;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
-    .candidate-source {
+    .candidate-quote {
+        font-size: 0.88rem;
+        color: #44403C;
+        margin-top: 4px;
+        line-height: 1.45;
+    }
+    .candidate-link {
         display: inline-block;
         margin-top: 6px;
         font-size: 0.8rem;
@@ -202,119 +216,103 @@ def parser_date(date_str):
 
 
 def detecter_parti(texte):
-    for declinaison, label in PARTIS_CONNUS:
+    for declinaison, label in PARTIS_MAPPING:
         if re.search(r"\b" + re.escape(declinaison) + r"\b", texte, re.IGNORECASE):
             return label
-    return "Parti / Mouvement en attente de précision"
+    return "Mouvement politique en cours de précision"
 
 
-def charger_fichier(chemin):
-    if os.path.exists(chemin):
-        with open(chemin, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+def detecter_candidat(texte):
+    for nom, parti_defaut in POLITIQUES_CONNUES:
+        if re.search(r"\b" + re.escape(nom) + r"\b", texte, re.IGNORECASE):
+            parti = detecter_parti(texte)
+            return nom, parti if parti != "Mouvement politique en cours de précision" else parti_defaut
+    return None, None
 
 
-def sauvegarder_fichier(chemin, data):
-    with open(chemin, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-# Mise à jour automatique en arrière-plan (au chargement)
-@st.cache_data(ttl=1800, show_spinner=False)
-def sync_presse_automatique():
-    existants_lois = charger_fichier(DB_LOIS)
-    liens_vus_lois = {a["Lien"] for a in existants_lois}
-    nouvelles_lois = []
+@st.cache_data(ttl=900, show_spinner=False)
+def recuperer_donnees():
+    articles_lois = []
+    liens_vus = set()
 
     for q in QUERIES_LOIS:
         url = f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl=fr&gl=FR&ceid=FR:fr"
-        flux = feedparser.parse(url)
+        try:
+            flux = feedparser.parse(url)
+            for entry in flux.entries:
+                lien = entry.link
+                if lien in liens_vus:
+                    continue
 
-        for entry in flux.entries:
-            lien = entry.link
-            if lien in liens_vus_lois:
-                continue
+                dt = parser_date(entry.get("published", ""))
+                if dt and dt < DATE_MIN:
+                    continue
 
-            dt = parser_date(entry.get("published", ""))
-            # Rejet de tout ce qui précède le 01/01/2026
-            if dt and dt < DATE_MIN:
-                continue
+                liens_vus.add(lien)
+                source = entry.source.get("title", "Presse") if hasattr(entry, "source") else "Presse"
+                titre = html.unescape(entry.title)
+                if " - " in titre:
+                    titre = titre.rsplit(" - ", 1)[0]
 
-            liens_vus_lois.add(lien)
-            source = entry.source.get("title", "Presse") if hasattr(entry, "source") else "Presse"
-            titre = html.unescape(entry.title)
-            if " - " in titre:
-                titre = titre.rsplit(" - ", 1)[0]
+                articles_lois.append({
+                    "Date": dt.strftime("%d %b %Y %H:%M") if dt else "2026",
+                    "Source": source,
+                    "Titre": titre,
+                    "Lien": lien,
+                    "_dt": dt.isoformat() if dt else "2026-01-01T00:00:00",
+                })
+        except Exception:
+            continue
 
-            nouvelles_lois.append({
-                "Date": dt.strftime("%d %b %Y %H:%M") if dt else "2026",
-                "Source": source,
-                "Titre": titre,
-                "Lien": lien,
-                "_dt": dt.isoformat() if dt else "2026-01-01T00:00:00",
-            })
+    articles_lois.sort(key=lambda x: x.get("_dt", ""), reverse=True)
 
-    total_lois = nouvelles_lois + existants_lois
-    # Classement strict : plus récent en haut
-    total_lois.sort(key=lambda x: x.get("_dt", ""), reverse=True)
-    sauvegarder_fichier(DB_LOIS, total_lois)
-
-    existants_cand = charger_fichier(DB_CANDIDATS)
-    liens_vus_cand = {c["Lien"] for c in existants_cand}
-    nouveaux_cand = []
-
+    candidats_map = {}
     for q in QUERIES_CANDIDATS:
         url = f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl=fr&gl=FR&ceid=FR:fr"
-        flux = feedparser.parse(url)
+        try:
+            flux = feedparser.parse(url)
+            for entry in flux.entries:
+                dt = parser_date(entry.get("published", ""))
+                if dt and dt < DATE_MIN:
+                    continue
 
-        for entry in flux.entries:
-            lien = entry.link
-            if lien in liens_vus_cand:
-                continue
+                titre = html.unescape(entry.title)
+                source = entry.source.get("title", "Presse") if hasattr(entry, "source") else "Presse"
+                if " - " in titre:
+                    titre = titre.rsplit(" - ", 1)[0]
 
-            dt = parser_date(entry.get("published", ""))
-            if dt and dt < DATE_MIN:
-                continue
+                nom, parti = detecter_candidat(titre)
+                if nom:
+                    dt_iso = dt.isoformat() if dt else "2026-01-01T00:00:00"
+                    if nom not in candidats_map or dt_iso > candidats_map[nom].get("_dt", ""):
+                        candidats_map[nom] = {
+                            "Nom": nom,
+                            "Parti": parti,
+                            "DerniereAnnonce": titre,
+                            "Source": source,
+                            "Date": dt.strftime("%d %b %Y") if dt else "2026",
+                            "Lien": entry.link,
+                            "_dt": dt_iso,
+                        }
+        except Exception:
+            continue
 
-            liens_vus_cand.add(lien)
-            source = entry.source.get("title", "Presse") if hasattr(entry, "source") else "Presse"
-            titre = html.unescape(entry.title)
-            if " - " in titre:
-                titre = titre.rsplit(" - ", 1)[0]
+    liste_candidats = list(candidats_map.values())
+    liste_candidats.sort(key=lambda x: x.get("_dt", ""), reverse=True)
 
-            parti = detecter_parti(titre)
-
-            nouveaux_cand.append({
-                "Annonce": titre,
-                "Parti": parti,
-                "Source": source,
-                "Lien": lien,
-                "Date": dt.strftime("%d %b %Y") if dt else "2026",
-                "_dt": dt.isoformat() if dt else "2026-01-01T00:00:00",
-            })
-
-    total_cand = nouveaux_cand + existants_cand
-    total_cand.sort(key=lambda x: x.get("_dt", ""), reverse=True)
-    sauvegarder_fichier(DB_CANDIDATS, total_cand)
-
-    return len(nouvelles_lois), len(nouveaux_cand)
+    return articles_lois, liste_candidats
 
 
-# Exécution automatique immédiate à l'ouverture
-sync_presse_automatique()
-
-data_lois = charger_fichier(DB_LOIS)
-data_cand = charger_fichier(DB_CANDIDATS)
+data_lois, data_cand = recuperer_donnees()
 
 
 def exporter_excel(df_export):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Propositions Législatives"
+    ws.title = "Veille Législative France"
 
-    headers = ["Date", "Média / Source", "Proposition / Annonce de loi", "Lien source"]
+    headers = ["Date", "Média / Source", "Proposition de loi / Mesure", "Lien de consultation"]
     ws.append(headers)
 
     header_fill = PatternFill(start_color="1C1917", end_color="1C1917", fill_type="solid")
@@ -355,31 +353,29 @@ def exporter_excel(df_export):
     return output.getvalue()
 
 
-# En-tête
 st.markdown(
     f"""
 <div class="top-meta">
-    <span>Répertoire institutionnel de veille stratégique</span>
-    <span>{datetime.now().strftime('%d %B %Y')} — Synchronisé en direct</span>
+    <span>Répertoire institutionnel de veille stratégique — Presse française</span>
+    <span>{datetime.now().strftime('%d %B %Y')} — Synchronisation automatique</span>
 </div>
 <h1 class="header-title">Présidentielle 2027<br>— <em>la course, en un coup d'œil</em></h1>
-<p class="header-lead">Point de repère sur les candidatures et sélection élargie des propositions de loi relayées dans l'actualité politique et agroalimentaire.</p>
+<p class="header-lead">Suivi des déclarations de candidatures dans les médias et des propositions de loi françaises (focus régulation et secteur agroalimentaire).</p>
 <div class="milestones">
     <span><strong>1er tour :</strong> 18 avril 2027</span>
     <span><strong>2d tour :</strong> 2 mai 2027</span>
-    <span><strong>Filtre strict :</strong> Parutions presse post-1er janvier 2026</span>
+    <span><strong>Filtre temporel :</strong> Textes et déclarations post-1er janvier 2026</span>
 </div>
 <div class="main-separator"></div>
 """,
     unsafe_allow_html=True,
 )
 
-tab_candidats, tab_lois = st.tabs(["Candidats", "Propositions de loi"])
+tab_candidats, tab_lois = st.tabs(["Candidats déclarés", "Propositions de loi"])
 
-# Onglet 1 : Candidats
 with tab_candidats:
-    st.markdown("<h3 style='font-family:Lora,serif; font-size:1.4rem; font-weight:700;'>Candidatures & investitures relevées dans la presse</h3>", unsafe_allow_html=True)
-    st.caption("Articles de presse récents mentionnant des déclarations officielles de candidatures et mouvements de partis (post-2026).")
+    st.markdown("<h3 style='font-family:Lora,serif; font-size:1.4rem; font-weight:700;'>Personnalités déclarées candidates dans la presse</h3>", unsafe_allow_html=True)
+    st.caption("Liste actualisée automatiquement d'après les dernières dépêches et déclarations publiques relevées dans les médias nationaux.")
 
     if data_cand:
         c1, c2 = st.columns(2)
@@ -388,18 +384,18 @@ with tab_candidats:
             with col_dest:
                 st.markdown(
                     f"""
-                <div class="candidate-box">
-                    <div class="candidate-name">{c['Annonce']}</div>
-                    <div class="candidate-role"><strong>Parti détecté :</strong> {c['Parti']} — <em>{c['Source']} ({c['Date']})</em></div>
-                    <a class="candidate-source" href="{c['Lien']}" target="_blank">Lire la déclaration ↗</a>
+                <div class="candidate-card">
+                    <div class="candidate-name">{c['Nom']}</div>
+                    <span class="candidate-party">{c['Parti']}</span>
+                    <div class="candidate-quote">« {c['DerniereAnnonce']} »</div>
+                    <a class="candidate-link" href="{c['Lien']}" target="_blank">Consulter l'article ({c['Source']} - {c['Date']}) ↗</a>
                 </div>
                 """,
                     unsafe_allow_html=True,
                 )
     else:
-        st.info("Recherche des déclarations récentes en cours...")
+        st.info("Recherche et analyse des déclarations en cours...")
 
-# Onglet 2 : Propositions de loi
 with tab_lois:
     df_lois = pd.DataFrame(data_lois) if data_lois else pd.DataFrame()
 
@@ -407,7 +403,7 @@ with tab_lois:
     with col_search:
         mot_cle = st.text_input(
             "Filtrer par mot-clé :",
-            placeholder="Filtrer : soda, agriculture, emballage, distribution, marge...",
+            placeholder="Ex : soda, emballage, consigne, marges, alimentation, taxe...",
             label_visibility="collapsed",
         )
 
@@ -423,23 +419,23 @@ with tab_lois:
             st.download_button(
                 label="📥 Télécharger l'Excel",
                 data=fichier_excel,
-                file_name=f"veille_lois_2026_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                file_name=f"veille_lois_france_{datetime.now().strftime('%Y%m%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
 
-        st.caption(f"{len(df_lois)} annonce(s) et proposition(s) répertoriée(s) — classées de la plus récente à la plus ancienne")
+        st.caption(f"{len(df_lois)} proposition(s) de loi et mesure(s) répertoriée(s) — de la plus récente à la plus ancienne")
 
         st.dataframe(
             df_lois[["Date", "Source", "Titre", "Lien"]],
             column_config={
-                "Lien": st.column_config.LinkColumn("Source", display_text="Consulter ↗"),
-                "Date": st.column_config.TextColumn("Horodatage", width="small"),
-                "Source": st.column_config.TextColumn("Média", width="small"),
-                "Titre": st.column_config.TextColumn("Proposition / Mesure", width="large"),
+                "Lien": st.column_config.LinkColumn("Source", display_text="Consulter le texte ↗"),
+                "Date": st.column_config.TextColumn("Date de parution", width="small"),
+                "Source": st.column_config.TextColumn("Média français", width="small"),
+                "Titre": st.column_config.TextColumn("Proposition de loi / Annonce", width="large"),
             },
             hide_index=True,
             use_container_width=True,
         )
     else:
-        st.info("Aucune parution post-2026 répertoriée pour le moment.")
+        st.info("Recherche des propositions de loi post-2026 en cours...")
